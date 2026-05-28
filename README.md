@@ -8,7 +8,9 @@ For the app to work you need NodeJs, MySQL and disable a setting in Chrome
 
 2. Run the command
 
-        npm install
+   ```
+    npm install
+   ```
 
 3. Wait for the node modules to install
 
@@ -18,7 +20,9 @@ For the app to work you need NodeJs, MySQL and disable a setting in Chrome
 
 2. In the search bar open up the following URL
 
-        chrome://flags/#local-network-access-check
+   ```
+    chrome://flags/#local-network-access-check
+   ```
 
 3. In the dropdown select "Disabled"
 
@@ -36,10 +40,10 @@ For the app to work you need NodeJs, MySQL and disable a setting in Chrome
 
 2. Go to "localhost:3000" in your browser
 
-3. Select the class
+3. Select the campaign
 
-4. You will see each student that has recordings
+4. You will see each recipient that has recordings
 
 5. Click on "Render"
 
-6. Wait a few minutes and "Refresh the status" to see if the videos where correctly rendered
+6. Wait a few minutes and "Refresh the status" to see if the videos were correctly rendered
