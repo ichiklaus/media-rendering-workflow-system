@@ -1,0 +1,137 @@
+// apps/renderer/src/worker.ts
+import pLimit from 'p-limit';
+import { db } from '@mrws-core/db';
+import * as dotenv from 'dotenv';
+import { renderJob } from './jobs/render.jobs';
+// import { uploadRenderToFirebase } from "./services/firebase.services";
+import {
+  getNextJob,
+  markProcessing,
+  markCompleted,
+  markFailed,
+  claimNextJob,
+  updateJobStatus,
+  incrementAttempts,
+} from '@mrws-core/queue';
+import path from 'node:path';
+
+dotenv.config();
+
+const VIDEO_RENDER_JOB_CONCURRENCY = parseInt(
+  process.env.VIDEO_RENDER_JOB_CONCURRENCY ?? '1',
+  10,
+);
+
+const limit = pLimit(VIDEO_RENDER_JOB_CONCURRENCY);
+
+export function startWorker() {
+  setInterval(async () => {
+    const job = await getNextJob();
+    if (!job) return;
+
+    await markProcessing(job.id);
+
+    limit(async () => {
+      try {
+        await renderJob(job);
+        await markCompleted(job.id);
+      } catch (err) {
+        await markFailed(job.id, err);
+      }
+    });
+  }, 2000);
+}
+
+export async function recoverStuckJobs() {
+  console.log('recoverStuckJobs being called once');
+  await db.query(
+    `UPDATE renders
+     SET status = 'pending'
+     WHERE status = 'processing'`,
+  );
+
+  console.log('Recovered stuck jobs');
+}
+
+export async function workerLoop() {
+  while (true) {
+    const job = await claimNextJob();
+
+    if (!job) {
+      await new Promise((r) => setTimeout(r, 1000));
+      continue;
+    }
+
+    if (job.cancelled) {
+      await updateJobStatus(job.id, 'failed', 'Cancelled');
+      return;
+    }
+
+    limit(async () => {
+      try {
+        // await updateJobStatus(job.id, "processing");
+        await incrementAttempts(job.id);
+
+        const parsedInput =
+          typeof job.input === 'string' ? JSON.parse(job.input) : job.input;
+
+        const renderRes = await renderJob({
+          id: job.id,
+          compositionId: job.composition_id,
+          inputProps: parsedInput,
+        });
+
+        // console.log(`📤 Uploading render ${job.id} to Firebase...`);
+
+        // const firebaseUrl = await uploadRenderToFirebase({
+        // 	videoPath: renderRes.output,
+        // 	thumbnailPath: renderRes.thumbnailOutput,
+        // }, job.id);
+
+        console.log(`✅ Upload complete!`);
+        console.log(`🎬 Video URL: ${renderRes.output}`);
+        console.log(`🖼️ Thumbnail URL: ${renderRes.thumbnailOutput}`);
+
+        // await updateJobStatus(job.id, "done", undefined, renderRes.videoUrl, firebaseUrl.thumbnailUrl);
+
+        const BASE_URL = 'http://localhost:4000';
+
+        const videoUrl = renderRes.output
+          ? `${BASE_URL}/static/renders/${path.basename(renderRes.output)}`
+          : undefined;
+
+        const thumbnailUrl = renderRes.thumbnailOutput
+          ? `${BASE_URL}/static/renders/${path.basename(renderRes.thumbnailOutput)}`
+          : undefined;
+
+        await updateJobStatus(
+          job.id,
+          'done',
+          undefined,
+          videoUrl,
+          thumbnailUrl,
+        );
+
+        // await updateJobStatus(
+        //   job.id,
+        //   'done',
+        //   undefined,
+        //   renderRes.output,
+        //   renderRes.thumbnailOutput,
+        // );
+      } catch (err: any) {
+        console.log('🚀 ~ workerLoop ~ err:', err);
+        if (err.message?.includes('cancel')) {
+          await updateJobStatus(job.id, 'failed', 'Cancelled');
+          return;
+        }
+
+        if (job.attempts >= job.max_attempts) {
+          await updateJobStatus(job.id, 'failed', err.message);
+        } else {
+          await updateJobStatus(job.id, 'pending', err.message);
+        }
+      }
+    });
+  }
+}

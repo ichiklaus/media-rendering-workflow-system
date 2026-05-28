@@ -1,0 +1,36 @@
+// /apps/web/types/dashboard.ts
+
+export interface Student {
+  id: number;
+  campaign_uuid: string;
+  recipient_uuid: string;
+  name: string;
+  email: string | null;
+  videos: string[];
+  created_at: string;
+
+  render_id: string | null;
+  current_template_id: string | null;
+  current_template_request_id: string | null;
+  current_template_request_year: string | null;
+  current_template_path: string | null;
+
+  render_status: string | null;
+  render_progress: number | null;
+  render_url: string | null;
+  render_thumbnail: string | null;
+  render_error: string | null;
+  render_attempts: number | null;
+  render_max_attempts: number | null;
+  render_cancelled: boolean | null;
+}
+
+export interface Room {
+  campaign_uuid: string;
+}
+
+export interface RenderFragment {
+  id: string;
+  order: number;
+  src: string;
+}
